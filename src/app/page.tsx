@@ -1,14 +1,7 @@
 
-// import PDFViewer from "@/components/PdfViewer";
+
 
 import PDFUpload from "@/components/PDFUpload";
-
-
-
-
-
-
-
 
 export default function Home() {
   return (
@@ -18,9 +11,7 @@ export default function Home() {
       
        <PDFUpload/>
       </main>
-      <footer>
-
-      </footer>
+     
     </div>
   );
 }

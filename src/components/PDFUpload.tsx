@@ -13,7 +13,7 @@ const PDFUpload = () => {
       <h1 className="text-xl font-semibold mb-4">Upload and View PDF</h1>
       <PDFDropzone onUpload={setPdfUrl} />
       {pdfUrl && (
-        <div className="relative mt-4">
+        <div className=" flex items-center justify-center">
      
           <PDFEditor fileUrl={pdfUrl} />
         </div>
