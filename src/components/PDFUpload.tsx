@@ -1,18 +1,21 @@
+// components/PDFUpload.tsx
 "use client"
 import { useState } from 'react';
 import PDFDropzone from '../components/PDFDropZone';
-import PDFViewer from '../components/PDFViewer'; // Assume you have a PDFViewer component
+
+import PDFEditor from '../components/PDFEditor'; // Import PDFEditor component
 
 const PDFUpload = () => {
-  const [pdfUrl, setPdfUrl] = useState(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
   return (
     <div className="p-6">
       <h1 className="text-xl font-semibold mb-4">Upload and View PDF</h1>
       <PDFDropzone onUpload={setPdfUrl} />
       {pdfUrl && (
-        <div className="mt-4">
-          <PDFViewer fileUrl={pdfUrl} />
+        <div className="relative mt-4">
+     
+          <PDFEditor fileUrl={pdfUrl} />
         </div>
       )}
     </div>
