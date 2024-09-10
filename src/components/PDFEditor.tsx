@@ -1,17 +1,55 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+import { PDFDocument } from 'pdf-lib';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const overlayRef = useRef<HTMLDivElement | null>(null); // Ref for the overlay div
+  const overlayRef = useRef<HTMLDivElement | null>(null);
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [renderTask, setRenderTask] = useState<any>(null); // Track the ongoing render task.
-  const [isSelecting, setIsSelecting] = useState(false); // Track whether the user is selecting an area.
-  const [selectionRect, setSelectionRect] = useState<null | { x: number; y: number; width: number; height: number }>(null); // Store the selection area.
-  const [tool, setTool] = useState<'blur' | 'erase'>('blur'); // Current tool selected
+  const [renderTask, setRenderTask] = useState<any>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectionRect, setSelectionRect] = useState<null | { x: number; y: number; width: number; height: number }>(null);
+  const [pageEffects, setPageEffects] = useState<{ [page: number]: { blurs: any[], erases: any[] } }>({});
+  const [annotations, setAnnotations] = useState<{ [page: number]: { rect: { x: number; y: number; width: number; height: number }; text: string; color: string }[] }>({});
+
+ 
+  const getRandomLightColor = () => {
+    const r = Math.floor(Math.random() * 128 + 127);
+    const g = Math.floor(Math.random() * 128 + 127);
+    const b = Math.floor(Math.random() * 128 + 127);
+    const opacity = 0.3;
+    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+  };
+
+
+  const handleAnnotationButton = () => {
+    if (selectionRect && selectionRect.width > 0 && selectionRect.height > 0) {
+      const color = getRandomLightColor();
+      const text = prompt('Enter annotation text:') || 'Annotation';
+      addAnnotation(selectionRect, text, color);
+    }
+  };
+
+  const addAnnotation = (rect: { x: number; y: number; width: number; height: number }, text: string, color: string) => {
+    if (!canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const context = canvas.getContext('2d');
+
+    context!.fillStyle = color;
+    context!.fillRect(rect.x, rect.y, rect.width, rect.height);
+
+    setAnnotations(prevAnnotations => ({
+      ...prevAnnotations,
+      [currentPage]: [
+        ...(prevAnnotations[currentPage] || []),
+        { rect, text, color }
+      ]
+    }));
+  };
+
 
   useEffect(() => {
     if (fileUrl) {
@@ -20,7 +58,7 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
 
     return () => {
       if (renderTask) {
-        renderTask.cancel(); // Cancel any ongoing render task when the component unmounts or page changes.
+        renderTask.cancel();
       }
     };
   }, [fileUrl, currentPage]);
@@ -39,7 +77,7 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
     canvas!.width = viewport.width;
 
     if (renderTask) {
-      renderTask.cancel(); // Cancel the previous render task before starting a new one.
+      renderTask.cancel();
     }
 
     const renderContext = {
@@ -50,9 +88,44 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
     const task = page.render(renderContext);
     setRenderTask(task);
 
-    task.promise.catch((error: any) => {
+    task.promise.then(() => {
+      applyStoredEffects(pageNum);
+      reapplyAnnotations(pageNum); // Reapply stored annotations after rendering
+    }).catch((error: any) => {
       console.error('Render task error:', error);
     });
+  };
+
+  const reapplyAnnotations = (pageNum: number) => {
+    const pageAnnotations = annotations[pageNum] || [];
+    const context = canvasRef.current?.getContext('2d');
+
+    pageAnnotations.forEach(({ rect, color }) => {
+      context!.fillStyle = color;
+      context!.fillRect(rect.x, rect.y, rect.width, rect.height);
+    });
+  };
+
+  const applyStoredEffects = (pageNum: number) => {
+    const effects = pageEffects[pageNum];
+    if (effects) {
+      const { blurs, erases } = effects;
+      const context = canvasRef.current?.getContext('2d');
+
+      if (context) {
+        // Apply blur effects
+        blurs.forEach(({ x, y, width, height }) => {
+          const imageData = context.getImageData(x, y, width, height);
+          const blurredData = applyBlur(imageData);
+          context.putImageData(blurredData, x, y);
+        });
+
+        // Apply erase effects
+        erases.forEach(({ x, y, width, height }) => {
+          context.clearRect(x, y, width, height);
+        });
+      }
+    }
   };
 
   const handleNextPage = () => {
@@ -67,14 +140,12 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
     }
   };
 
-  // Start selecting an area for blurring or erasing.
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current!.getBoundingClientRect();
     setSelectionRect({ x: e.clientX - rect.left, y: e.clientY - rect.top, width: 0, height: 0 });
     setIsSelecting(true);
   };
 
-  // Update the selection area while dragging.
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isSelecting || !selectionRect) return;
 
@@ -89,16 +160,13 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
       height: Math.max(0, newHeight)
     });
 
-    // Update the overlay position and size
     updateOverlay();
   };
 
-  // End selection.
   const handleMouseUp = () => {
     setIsSelecting(false);
   };
 
-  // Update overlay for the selection border
   const updateOverlay = () => {
     if (!overlayRef.current || !selectionRect) return;
     const overlay = overlayRef.current;
@@ -109,27 +177,59 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
     overlay.style.height = `${selectionRect.height}px`;
   };
 
-  // Apply blur effect when the button is clicked.
   const handleBlurClick = () => {
     if (selectionRect && selectionRect.width > 0 && selectionRect.height > 0) {
-      blurSelection();
+      applyEffect('blur');
     }
   };
 
-  // Apply erase effect when the button is clicked.
   const handleEraseClick = () => {
     if (selectionRect && selectionRect.width > 0 && selectionRect.height > 0) {
-      eraseSelection();
+      applyEffect('erase');
     }
   };
+  
+ 
+  
+  const applyEffect = (type: 'blur' | 'erase') => {
+    if (!canvasRef.current || !selectionRect) return;
+    const canvas = canvasRef.current;
+    const context = canvas.getContext('2d');
 
-  // Apply a blur effect to the selected area.
+    if (context) {
+      const { x, y, width, height } = selectionRect;
+      const effect = { x, y, width, height };
+
+      setPageEffects(prev => {
+        const updatedEffects = { ...prev };
+        if (!updatedEffects[currentPage]) {
+          updatedEffects[currentPage] = { blurs: [], erases: [] };
+        }
+        if (type === 'blur') {
+          updatedEffects[currentPage].blurs.push(effect);
+        } else if (type === 'erase') {
+          updatedEffects[currentPage].erases.push(effect);
+        }
+        return updatedEffects;
+      });
+      
+      if (type === 'blur') {
+        blurSelection();
+      } else if (type === 'erase') {
+        eraseSelection();
+      }     
+    }
+  };
+  
+
+  
+
+ 
   const blurSelection = () => {
     if (!canvasRef.current || !selectionRect) return;
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
 
-    // Get the selected image data, ensuring the selection area is not zero.
     if (selectionRect.width > 0 && selectionRect.height > 0) {
       const imageData = context!.getImageData(
         selectionRect.x,
@@ -138,19 +238,16 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
         selectionRect.height
       );
 
-      // Apply a simple blur effect by averaging pixel colors in the selection.
       const blurredData = applyBlur(imageData);
       context!.putImageData(blurredData, selectionRect.x, selectionRect.y);
     }
   };
 
-  // Apply an erase effect to the selected area.
   const eraseSelection = () => {
     if (!canvasRef.current || !selectionRect) return;
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
 
-    // Clear the selected area
     context!.clearRect(
       selectionRect.x,
       selectionRect.y,
@@ -159,13 +256,11 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
     );
   };
 
-  // Simple box blur effect by averaging neighboring pixel colors.
   const applyBlur = (imageData: ImageData) => {
     const pixels = imageData.data;
     const width = imageData.width;
     const height = imageData.height;
 
-    // Radius of blur effect
     const blurRadius = 3;
 
     const getPixelIndex = (x: number, y: number) => (y * width + x) * 4;
@@ -177,7 +272,6 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
           b = 0,
           a = 0;
 
-        // Average the pixels within the blur radius.
         for (let dy = -blurRadius; dy <= blurRadius; dy++) {
           for (let dx = -blurRadius; dx <= blurRadius; dx++) {
             const index = getPixelIndex(x + dx, y + dy);
@@ -200,30 +294,117 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
     return new ImageData(pixels, width, height);
   };
 
-  // Function to get canvas blob and upload it.
-  const handleDownloadClick = () => {
+  const handleDownloadClick = async () => {
     if (!canvasRef.current) return;
-  
-    const canvas = canvasRef.current;
-    const dataURL = canvas.toDataURL('image/png'); // Convert canvas to base64 data URL
-  
-    // Create a temporary link element
+    // Create a new PDF document
+    const pdfDoc = await PDFDocument.create();
+
+    // Define the total time for the upload process (for example, 10 seconds)
+    // const totalUploadTime = numPages*1000; 
+
+    // Iterate through all pages
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      // Switch to the correct page
+      setCurrentPage(pageNum);
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for the page to be rendered
+
+      // Get the canvas for the current page
+      const canvas = canvasRef.current;
+      const context = canvas.getContext('2d');
+
+      if (context) {
+        // Get canvas data URL for the current page
+        const dataURL = canvas.toDataURL('image/png');
+        const imageBytes = await fetch(dataURL).then(res => res.arrayBuffer());
+        const image = await pdfDoc.embedPng(imageBytes);
+
+        // Set page size to match the canvas size
+        const pageWidth = canvas.width;
+        const pageHeight = canvas.height;
+
+        // Create a new page in the PDF with the same dimensions as the canvas
+        const pdfPage = pdfDoc.addPage([pageWidth, pageHeight]);
+
+        // Draw the image on the PDF page
+        pdfPage.drawImage(image, {
+          x: 0,
+          y: 0,
+          width: pageWidth,
+          height: pageHeight,
+        });
+      }
+    }
+
+    // Save the PDF and trigger download
+    const pdfBytes = await pdfDoc.save();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
     const link = document.createElement('a');
-    link.href = dataURL;
-    link.download = 'updated-file.png'; // Set the filename for download
-  
-    // Append the link to the document body and simulate a click
-    document.body.appendChild(link);
+    link.href = URL.createObjectURL(blob);
+    link.download = 'updated_document.pdf';
     link.click();
-  
-    // Remove the link from the document
-    document.body.removeChild(link);
+
+
   };
-  
-  
+
+
 
   return (
     <div>
+       <div className="annotation-container flex flex-row flex-wrap mt-10">
+        {(annotations[currentPage] || []).map((annotation, index) => (
+          <div
+            key={index}
+            className="annotation-item px-1 m-1 rounded"
+            style={{ backgroundColor: annotation.color }} // Apply the background color
+          >
+            <span className='text-xs px-1'>{index + 1}</span> {annotation.text}
+          </div>
+        ))}
+
+      </div>
+      <div className='flex flex-row justify-between  py-1 mb-2'>
+     
+        <div>
+          <button
+            onClick={handleBlurClick}
+            className="px-2 py-0.5  border border-r-0 border-gray-400 hover:bg-slate-200"
+            disabled={!selectionRect || selectionRect.width === 0 || selectionRect.height === 0}
+          >
+            Blur
+          </button>
+          <button
+            onClick={handleEraseClick}
+            className="px-2 py-0.5  border border-r-0 border-gray-400 hover:bg-slate-200"
+            disabled={!selectionRect || selectionRect.width === 0 || selectionRect.height === 0}
+          >
+            Erase
+          </button>
+          <button
+            onClick={handleAnnotationButton}
+            className="px-2 py-0.5   border border-r-0 border-gray-400 hover:bg-slate-200"
+            disabled={!selectionRect || selectionRect.width === 0 || selectionRect.height === 0}
+          >
+            Add Annotation
+          </button>
+          <button
+            onClick={handleDownloadClick}
+            className="px-2 py-0.5    border border-gray-400 hover:bg-slate-200"
+          >
+            Upload
+          </button>
+        </div>
+
+        {/* <div className="px-2 py-1">
+          <button onClick={handleUndo} disabled={history.length === 0} className="px-4 py-2 bg-gray-300 text-black font-semibold rounded hover:bg-gray-400 disabled:bg-gray-200">
+            Undo
+          </button>
+          <button onClick={handleRedo} disabled={redoStack.length === 0} className="px-4 py-2 bg-gray-300 text-black font-semibold rounded hover:bg-gray-400 disabled:bg-gray-200">
+            Redo
+          </button>
+
+        </div> */}
+      </div>
+      
       <canvas
         ref={canvasRef}
         width={800}
@@ -231,17 +412,17 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        className='mx-auto'
+        className='border-2 border-black'
       />
       <div
         ref={overlayRef}
         style={{
           position: 'absolute',
-          border: '2px dashed rgba(0, 0, 255, 0.5)',
+
           pointerEvents: 'none',
         }}
       />
-      <div className="controls">
+      <div className="flex my-4 flex-row gap-2 items-center justify-center">
         <button
           onClick={handlePreviousPage}
           disabled={currentPage === 1}
@@ -259,29 +440,11 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
         >
           Next Page
         </button>
-        <button
-          onClick={handleBlurClick}
-          className="px-4 py-2 bg-red-500 text-white font-semibold rounded hover:bg-red-600"
-          disabled={!selectionRect || selectionRect.width === 0 || selectionRect.height === 0}
-        >
-          Blur Selection
-        </button>
-        <button
-          onClick={handleEraseClick}
-          className="px-4 py-2 bg-green-500 text-white font-semibold rounded hover:bg-green-600"
-          disabled={!selectionRect || selectionRect.width === 0 || selectionRect.height === 0}
-        >
-          Erase Selection
-        </button>
-        <button
-          onClick={handleDownloadClick}
-          className="px-4 py-2 bg-purple-500 text-white font-semibold rounded hover:bg-purple-600"
-        >
-          Upload Updated File
-        </button>
+
       </div>
     </div>
   );
 };
 
 export default PDFEditor;
+

@@ -10,7 +10,7 @@ const PDFUpload = () => {
 
   return (
     <div className="p-6">
-      <h1 className="text-xl font-semibold mb-4">Upload and View PDF</h1>
+      
       <PDFDropzone onUpload={setPdfUrl} />
       {pdfUrl && (
         <div className=" flex items-center justify-center">

@@ -29,7 +29,7 @@ const PDFDropzone = ({ onUpload }:any )=> {
   return (
     <div
       id="dropzone"
-      className="dropzone border border-gray-300 rounded-md p-4 w-[80%] mx-auto"
+      className="dropzone border border-gray-300 rounded-md p-4 w-[63%] mx-auto"
     />
   );
 };
