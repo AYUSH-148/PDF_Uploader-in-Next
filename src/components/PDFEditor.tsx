@@ -39,7 +39,7 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
       const color = getRandomLightColor();
       const text = prompt('Enter annotation text:')||null;
       if(text === null){
-        return ;
+        return
       }
       addAnnotation(selectionRect, text, color);
     }
