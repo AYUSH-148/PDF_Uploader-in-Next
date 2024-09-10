@@ -377,6 +377,7 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
 
       </div>
 
+      <div className="relative">
       <canvas
         ref={canvasRef}
         width={800}
@@ -384,16 +385,19 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        className='border-2 border-black'
+        className="border-2 border-black"
       />
       <div
         ref={overlayRef}
+        className={`absolute border-dotted border-2 border-blue-600 bg-blue-100 opacity-50   ${
+          isSelecting ? 'block' : 'hidden'
+        }`}
         style={{
           position: 'absolute',
-
           pointerEvents: 'none',
         }}
       />
+    </div>
       <div className="flex my-4 flex-row gap-2 items-center justify-center">
         <button
           onClick={handlePreviousPage}
