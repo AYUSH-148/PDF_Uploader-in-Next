@@ -1,8 +1,10 @@
 // components/PDFDropzone.js
 import { useEffect } from 'react';
 import Dropzone from 'dropzone';
-
-const PDFDropzone = ({ onUpload }:any )=> {
+interface PDFDropzoneProps {
+  onUpload: (fileUrl: string) => void;
+}
+const PDFDropzone = ({ onUpload}  :PDFDropzoneProps)=> {
   useEffect(() => {
     const dropzone = new Dropzone('#dropzone', {
       url: '#', // Not using server; handle files locally
@@ -11,12 +13,11 @@ const PDFDropzone = ({ onUpload }:any )=> {
       acceptedFiles: 'application/pdf',
       maxFiles: 1,
       maxFilesize: 50, // MB
-      //@ts-ignore
-      success: (file:any, response:any) => {
+      success: (file:File) => {
         const fileUrl = URL.createObjectURL(file);
         onUpload(fileUrl);
       },
-      error: (file:any, response:any) => {
+      error: (file:File, response) => {
         console.error('File upload error:', response);
       }
     });

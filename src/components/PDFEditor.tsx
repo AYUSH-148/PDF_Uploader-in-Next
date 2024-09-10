@@ -1,18 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { PDFDocument } from 'pdf-lib';
-
+import { RenderTask } from 'pdfjs-dist'; // Assuming you are using pdf.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
-  const [numPages, setNumPages] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [renderTask, setRenderTask] = useState<any>(null);
-  const [isSelecting, setIsSelecting] = useState(false);
+  const [numPages, setNumPages] = useState<number>(0);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [renderTask, setRenderTask] = useState<RenderTask|null>(null);
+  const [isSelecting, setIsSelecting] = useState<boolean>(false);
   const [selectionRect, setSelectionRect] = useState<null | { x: number; y: number; width: number; height: number }>(null);
-  const [pageEffects, setPageEffects] = useState<{ [page: number]: { blurs: any[], erases: any[] } }>({});
+  const [pageEffects, setPageEffects] = useState<{ [page: number]: { blurs: { x: number; y: number; width: number; height: number; }[], erases: { x: number; y: number; width: number; height: number; }[] } }>({});
   const [annotations, setAnnotations] = useState<{ [page: number]: { rect: { x: number; y: number; width: number; height: number }; text: string; color: string }[] }>({});
 
  
@@ -91,7 +91,7 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
     task.promise.then(() => {
       applyStoredEffects(pageNum);
       reapplyAnnotations(pageNum); // Reapply stored annotations after rendering
-    }).catch((error: any) => {
+    }).catch((error: Error) => {
       console.error('Render task error:', error);
     });
   };
