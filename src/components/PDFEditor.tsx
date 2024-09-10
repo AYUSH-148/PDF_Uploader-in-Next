@@ -2,33 +2,45 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { PDFDocument } from 'pdf-lib';
 import { RenderTask } from 'pdfjs-dist'; // Assuming you are using pdf.js
+import { applyBlur, getRandomLightColor } from '@/lib/helper';
+import { MdBlurOn } from "react-icons/md";
+import { FaEraser, FaDownload } from "react-icons/fa";
+import { IoIosAddCircleOutline } from "react-icons/io";
+
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [renderTask, setRenderTask] = useState<RenderTask|null>(null);
+  const [renderTask, setRenderTask] = useState<RenderTask | null>(null);
   const [isSelecting, setIsSelecting] = useState<boolean>(false);
   const [selectionRect, setSelectionRect] = useState<null | { x: number; y: number; width: number; height: number }>(null);
   const [pageEffects, setPageEffects] = useState<{ [page: number]: { blurs: { x: number; y: number; width: number; height: number; }[], erases: { x: number; y: number; width: number; height: number; }[] } }>({});
   const [annotations, setAnnotations] = useState<{ [page: number]: { rect: { x: number; y: number; width: number; height: number }; text: string; color: string }[] }>({});
+  
 
- 
-  const getRandomLightColor = () => {
-    const r = Math.floor(Math.random() * 128 + 127);
-    const g = Math.floor(Math.random() * 128 + 127);
-    const b = Math.floor(Math.random() * 128 + 127);
-    const opacity = 0.3;
-    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-  };
+  useEffect(() => {
+    if (fileUrl) {
+      renderPage(currentPage);
+    }
+    return () => {
+      if (renderTask) {
+        renderTask.cancel();
+      }
+    };
+  }, [fileUrl, currentPage]);
 
 
   const handleAnnotationButton = () => {
     if (selectionRect && selectionRect.width > 0 && selectionRect.height > 0) {
       const color = getRandomLightColor();
-      const text = prompt('Enter annotation text:') || 'Annotation';
+      const text = prompt('Enter annotation text:')||null;
+      if(text === null){
+        return ;
+      }
       addAnnotation(selectionRect, text, color);
     }
   };
@@ -37,10 +49,16 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
     if (!canvasRef.current) return;
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
-
-    context!.fillStyle = color;
-    context!.fillRect(rect.x, rect.y, rect.width, rect.height);
-
+  
+    if (context) {
+      // Draw the rectangle
+      context.fillStyle = color;
+      context.fillRect(rect.x, rect.y, rect.width, rect.height);
+  
+    }
+    
+  
+    // Save annotation details
     setAnnotations(prevAnnotations => ({
       ...prevAnnotations,
       [currentPage]: [
@@ -49,62 +67,59 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
       ]
     }));
   };
-
-
-  useEffect(() => {
-    if (fileUrl) {
-      renderPage(currentPage);
-    }
-
-    return () => {
-      if (renderTask) {
-        renderTask.cancel();
-      }
-    };
-  }, [fileUrl, currentPage]);
+  
+  
+  
+  
 
   const renderPage = async (pageNum: number) => {
     const loadingTask = pdfjsLib.getDocument(fileUrl);
     const pdf = await loadingTask.promise;
     setNumPages(pdf.numPages);
-
+  
     const page = await pdf.getPage(pageNum);
     const viewport = page.getViewport({ scale: 1.5 });
     const canvas = canvasRef.current;
     const context = canvas!.getContext('2d');
-
+  
     canvas!.height = viewport.height;
     canvas!.width = viewport.width;
-
-    if (renderTask) {
-      renderTask.cancel();
-    }
-
+  
     const renderContext = {
       canvasContext: context!,
       viewport: viewport,
     };
-
+  
     const task = page.render(renderContext);
     setRenderTask(task);
-
+  
     task.promise.then(() => {
       applyStoredEffects(pageNum);
-      reapplyAnnotations(pageNum); // Reapply stored annotations after rendering
+      reapplyAnnotations(pageNum); // Reapply annotations after the page is rendered
     }).catch((error: Error) => {
       console.error('Render task error:', error);
     });
   };
+  
 
   const reapplyAnnotations = (pageNum: number) => {
     const pageAnnotations = annotations[pageNum] || [];
     const context = canvasRef.current?.getContext('2d');
-
-    pageAnnotations.forEach(({ rect, color }) => {
-      context!.fillStyle = color;
-      context!.fillRect(rect.x, rect.y, rect.width, rect.height);
-    });
+  
+    if (context) {
+      pageAnnotations.forEach(({ rect, text, color }) => {
+        // Draw the rectangle
+        context.fillStyle = color;
+        context.fillRect(rect.x, rect.y, rect.width, rect.height);
+  
+        // Draw the text
+        context.fillStyle = 'black'; // Text color
+        context.font = '12px Arial'; // Font style
+        context.fillText(text, rect.x, rect.y + rect.height / 2); // Adjust text position
+      });
+    }
   };
+  
 
   const applyStoredEffects = (pageNum: number) => {
     const effects = pageEffects[pageNum];
@@ -188,10 +203,11 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
       applyEffect('erase');
     }
   };
-  
- 
-  
+
+
+
   const applyEffect = (type: 'blur' | 'erase') => {
+
     if (!canvasRef.current || !selectionRect) return;
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
@@ -210,21 +226,20 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
         } else if (type === 'erase') {
           updatedEffects[currentPage].erases.push(effect);
         }
-        return updatedEffects;
+        // Ensure the updatedEffects structure matches the expected type
+        return updatedEffects as { [page: number]: { blurs: { x: number; y: number; width: number; height: number; }[]; erases: { x: number; y: number; width: number; height: number; }[] } };
       });
-      
+
       if (type === 'blur') {
         blurSelection();
       } else if (type === 'erase') {
         eraseSelection();
-      }     
+      }
     }
   };
-  
 
   
-
- 
+  
   const blurSelection = () => {
     if (!canvasRef.current || !selectionRect) return;
     const canvas = canvasRef.current;
@@ -256,43 +271,7 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
     );
   };
 
-  const applyBlur = (imageData: ImageData) => {
-    const pixels = imageData.data;
-    const width = imageData.width;
-    const height = imageData.height;
 
-    const blurRadius = 3;
-
-    const getPixelIndex = (x: number, y: number) => (y * width + x) * 4;
-
-    for (let y = blurRadius; y < height - blurRadius; y++) {
-      for (let x = blurRadius; x < width - blurRadius; x++) {
-        let r = 0,
-          g = 0,
-          b = 0,
-          a = 0;
-
-        for (let dy = -blurRadius; dy <= blurRadius; dy++) {
-          for (let dx = -blurRadius; dx <= blurRadius; dx++) {
-            const index = getPixelIndex(x + dx, y + dy);
-            r += pixels[index];
-            g += pixels[index + 1];
-            b += pixels[index + 2];
-            a += pixels[index + 3];
-          }
-        }
-
-        const avgFactor = (blurRadius * 2 + 1) ** 2;
-        const index = getPixelIndex(x, y);
-        pixels[index] = r / avgFactor;
-        pixels[index + 1] = g / avgFactor;
-        pixels[index + 2] = b / avgFactor;
-        pixels[index + 3] = a / avgFactor;
-      }
-    }
-
-    return new ImageData(pixels, width, height);
-  };
 
   const handleDownloadClick = async () => {
     if (!canvasRef.current) return;
@@ -347,64 +326,57 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
   };
 
 
-
   return (
     <div>
-       <div className="annotation-container flex flex-row flex-wrap mt-10">
+      <div className="annotation-container flex flex-row flex-wrap mt-10">
         {(annotations[currentPage] || []).map((annotation, index) => (
           <div
             key={index}
-            className="annotation-item px-1 m-1 rounded"
+            className="annotation-item px-1.5 py-0.5 m-1 rounded"
             style={{ backgroundColor: annotation.color }} // Apply the background color
           >
-            <span className='text-xs px-1'>{index + 1}</span> {annotation.text}
+            <span className='text-xs px-0.5'>{index + 1}.</span> {annotation.text}
           </div>
         ))}
 
       </div>
-      <div className='flex flex-row justify-between  py-1 mb-2'>
-     
-        <div>
+      <div className='flex flex-row justify-between  py-1  text-xl'>
+
+        <div className='flex flex-row gap-3 mb-1 my-1 mt-2'>
           <button
             onClick={handleBlurClick}
-            className="px-2 py-0.5  border border-r-0 border-gray-400 hover:bg-slate-200"
+            className="px-2  cursor-pointer"
             disabled={!selectionRect || selectionRect.width === 0 || selectionRect.height === 0}
           >
-            Blur
+            <MdBlurOn />
           </button>
           <button
             onClick={handleEraseClick}
-            className="px-2 py-0.5  border border-r-0 border-gray-400 hover:bg-slate-200"
+            className="px-2   cursor-pointer"
             disabled={!selectionRect || selectionRect.width === 0 || selectionRect.height === 0}
           >
-            Erase
+            <FaEraser />
           </button>
           <button
             onClick={handleAnnotationButton}
-            className="px-2 py-0.5   border border-r-0 border-gray-400 hover:bg-slate-200"
+            className="px-2   cursor-pointer"
             disabled={!selectionRect || selectionRect.width === 0 || selectionRect.height === 0}
           >
-            Add Annotation
+            <IoIosAddCircleOutline />
           </button>
           <button
             onClick={handleDownloadClick}
-            className="px-2 py-0.5    border border-gray-400 hover:bg-slate-200"
+            className="px-2   cursor-pointer"
           >
-            Upload
+            <FaDownload />
           </button>
         </div>
+        <div>
+     
+        </div>
 
-        {/* <div className="px-2 py-1">
-          <button onClick={handleUndo} disabled={history.length === 0} className="px-4 py-2 bg-gray-300 text-black font-semibold rounded hover:bg-gray-400 disabled:bg-gray-200">
-            Undo
-          </button>
-          <button onClick={handleRedo} disabled={redoStack.length === 0} className="px-4 py-2 bg-gray-300 text-black font-semibold rounded hover:bg-gray-400 disabled:bg-gray-200">
-            Redo
-          </button>
-
-        </div> */}
       </div>
-      
+
       <canvas
         ref={canvasRef}
         width={800}
