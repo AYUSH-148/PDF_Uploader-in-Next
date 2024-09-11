@@ -19,7 +19,9 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
   const [isSelecting, setIsSelecting] = useState<boolean>(false);
   const [selectionRect, setSelectionRect] = useState<null | { x: number; y: number; width: number; height: number }>(null);
   const [annotations, setAnnotations] = useState<{ [page: number]: { rect: { x: number; y: number; width: number; height: number }; text: string; color: string }[] }>({});
-  const [undoStack, setUndoStack] = useState<{ [page: number]: Array<{ type: 'blur' | 'erase' | 'annotation'; data: any }> }>({});
+  const [undoStack, setUndoStack] = useState<{ [page: number]: Array<{ type: 'blur' | 'erase' | 'annotation'; data:{
+    image: string; x: number; y: number; width: number; height: number 
+}}> }>({});
 
   const [load, setLoad] = useState<boolean>(false);
 
