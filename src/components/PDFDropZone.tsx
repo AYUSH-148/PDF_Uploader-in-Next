@@ -1,23 +1,26 @@
-// components/PDFDropzone.js
+
 import { useEffect } from 'react';
 import Dropzone from 'dropzone';
+import { AiOutlineCloudUpload } from 'react-icons/ai';
+
 interface PDFDropzoneProps {
-  onUpload: (fileUrl: string) => void;
+  onUpload: (fileUrl: string, fileName: string) => void;
 }
-const PDFDropzone = ({ onUpload}  :PDFDropzoneProps)=> {
+const PDFDropzone = ({ onUpload }: PDFDropzoneProps) => {
   useEffect(() => {
     const dropzone = new Dropzone('#dropzone', {
       url: '#', // Not using server; handle files locally
       addRemoveLinks: true,
-      dictDefaultMessage: 'Drag a PDF here to upload, or click to select one',
+      // dictDefaultMessage: 'Drag a PDF here to upload, or click to select one',
       acceptedFiles: 'application/pdf',
       maxFiles: 1,
       maxFilesize: 50, // MB
-      success: (file:File) => {
+      success: (file: File) => {
         const fileUrl = URL.createObjectURL(file);
-        onUpload(fileUrl);
+        const fileName = file.name; // Get the name of the file
+        onUpload(fileUrl, fileName); // Pass both fileUrl and fileName
       },
-      error: (file:File, response) => {
+      error: (file: File, response) => {
         console.error('File upload error:', response);
       }
     });
@@ -30,8 +33,12 @@ const PDFDropzone = ({ onUpload}  :PDFDropzoneProps)=> {
   return (
     <div
       id="dropzone"
-      className="dropzone border border-gray-300 rounded-md p-4 w-[30%] mx-auto"
-    />
+      className="dropzone  font-serif text-lg font-semibold  shadow-lg bg-blue-100  w-[35%] mx-auto flex flex-col
+      items-center justify-center  text-center cursor-pointer "
+    >
+      <AiOutlineCloudUpload className="text-[100px] text-blue-500 " />
+      
+    </div>
   );
 };
 
