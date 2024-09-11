@@ -33,7 +33,7 @@ const PDFDropzone = ({ onUpload }: PDFDropzoneProps) => {
   return (
     <div
       id="dropzone"
-      className="dropzone  font-serif text-lg font-semibold  shadow-lg bg-blue-100  w-[35%] mx-auto flex flex-col
+      className="dropzone  font-serif text-lg font-semibold  shadow-lg bg-blue-100 w-[80%] md:w-[60%] lg:w-[35%] mx-auto flex flex-col
       items-center justify-center  text-center cursor-pointer "
     >
       <AiOutlineCloudUpload className="text-[100px] text-blue-500 " />

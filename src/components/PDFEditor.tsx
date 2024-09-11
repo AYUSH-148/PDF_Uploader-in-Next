@@ -34,38 +34,34 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
     };
   }, [fileUrl, currentPage]);
 
-
-
-
-
   const undoAction = () => {
     setUndoStack(prevStack => {
-        const newStack = { ...prevStack };
-        const pageStack = newStack[currentPage] || [];
-        const lastEffect = pageStack.pop();
-        
-        if (!lastEffect) return newStack; // No effect to undo
+      const newStack = { ...prevStack };
+      const pageStack = newStack[currentPage] || [];
+      const lastEffect = pageStack.pop();
 
-        const context = canvasRef.current?.getContext('2d');
-        if (context && canvasRef.current) {
-            const img = new Image();
-            img.src = lastEffect.data.image; // Use the image data saved in the undo stack
-            img.onload = () => {
-                if (canvasRef.current) {
-                    context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); // Clear canvas
-                    context.drawImage(img, 0, 0); // Redraw the last saved state
-                    applyStoredEffects(currentPage); // Reapply effects
-                    reapplyAnnotations(currentPage); // Reapply annotations
-                }
-            };
-        }
+      if (!lastEffect) return newStack; // No effect to undo
 
-        return newStack;
+      // Restore the last saved state from the undo stack
+      const context = canvasRef.current?.getContext('2d');
+      if (context && canvasRef.current) {
+        const img = new Image();
+        img.src = lastEffect.data.image; // Use the image data saved in the undo stack
+        img.onload = () => {
+          if (canvasRef.current) {
+            context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); // Clear canvas
+            context.drawImage(img, 0, 0); // Redraw the last saved state
+
+            // Reapply remaining effects and annotations
+            applyStoredEffects(currentPage);
+            reapplyAnnotations(currentPage);
+          }
+        };
+      }
+
+      return newStack;
     });
-};
-
-
-
+  };
 
   const applyEffect = (type: 'blur' | 'erase', data: { x: number; y: number; width: number; height: number }) => {
     if (!canvasRef.current) return;
@@ -95,7 +91,6 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
     }
   };
 
-
   const addAnnotation = (rect: { x: number; y: number; width: number; height: number }, text: string, color: string) => {
     if (!canvasRef.current) return;
     const canvas = canvasRef.current;
@@ -115,23 +110,6 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
         context.fillStyle = 'black'; // Text color
         context.font = '12px Arial'; // Font style
         context.fillText(text, rect.x, rect.y + rect.height / 2); // Adjust text position
-
-        // Save annotation details and add to undoStack
-        setUndoStack(prevStack => ({
-          ...prevStack,
-          [currentPage]: [
-            ...(prevStack[currentPage] || []),
-            {
-              type: 'annotation',
-              data: {
-                ...rect,
-                text,
-                color,
-                image: img.src // Save the captured canvas state
-              }
-            }
-          ]
-        }));
 
         // Save annotation details separately for reapplication
         setAnnotations(prevAnnotations => ({
@@ -207,18 +185,11 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
             context.putImageData(blurredData, data.x, data.y);
           } else if (type === 'erase') {
             context.clearRect(data.x, data.y, data.width, data.height);
-          } else if (type === 'annotation') {
-            context.fillStyle = data.color;
-            context.fillRect(data.x, data.y, data.width, data.height);
-            context.fillStyle = 'black'; // Text color
-            context.font = '12px Arial'; // Font style
-            context.fillText(data.text, data.x, data.y + data.height / 2); // Adjust text position
           }
         });
       }
     }
   };
-
 
   const handleNextPage = () => {
     if (currentPage < numPages) {
@@ -419,26 +390,29 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
 
       </div>
 
-      <div className="relative">
-        <canvas
-          ref={canvasRef}
-          width={800}
-          height={600}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          className="border-2 border-black bg-[#e1e1ea]"
-        />
-        <div
-          ref={overlayRef}
-          className={`absolute border-dotted border-2 border-blue-600 bg-blue-100 opacity-50   ${isSelecting ? 'block' : 'hidden'
-            }`}
-          style={{
-            position: 'absolute',
-            pointerEvents: 'none',
-          }}
-        />
+      <div className="">
+
+        <div className="canvas-container relative">
+          <canvas
+            ref={canvasRef}
+            className="canvas border-2 border-black bg-[#e1e1ea]"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+          />
+          <div
+            ref={overlayRef}
+            className={`absolute border-dotted border-2 border-blue-600 bg-blue-100 opacity-50   ${isSelecting ? 'block' : 'hidden'
+              }`}
+            style={{
+              position: 'absolute',
+              pointerEvents: 'none',
+            }}
+          />
+        </div>
       </div>
+
+
       <div className="flex my-4 flex-row gap-2 items-center justify-center">
         <button
           onClick={handlePreviousPage}
