@@ -1,11 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
-import { PDFDocument } from 'pdf-lib';
 import { RenderTask } from 'pdfjs-dist'; // Assuming you are using pdf.js
-import { applyBlur, getRandomLightColor } from '@/lib/helper';
-import { MdBlurOn } from "react-icons/md";
-import { FaEraser, FaDownload, FaUndo, FaSpinner } from "react-icons/fa";
-import { IoIosAddCircleOutline } from "react-icons/io";
+import { addAnnotation, applyBlur, downloadPDF, getRandomLightColor } from '@/lib/helper';
+import CanvasOverlay from './CanvasOverlay';
+import Toolbar from './Toolbar';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
@@ -19,9 +17,13 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
   const [isSelecting, setIsSelecting] = useState<boolean>(false);
   const [selectionRect, setSelectionRect] = useState<null | { x: number; y: number; width: number; height: number }>(null);
   const [annotations, setAnnotations] = useState<{ [page: number]: { rect: { x: number; y: number; width: number; height: number }; text: string; color: string }[] }>({});
-  const [undoStack, setUndoStack] = useState<{ [page: number]: Array<{ type: 'blur' | 'erase' | 'annotation'; data:{
-    image: string; x: number; y: number; width: number; height: number 
-}}> }>({});
+  const [undoStack, setUndoStack] = useState<{
+    [page: number]: Array<{
+      type: 'blur' | 'erase'; data: {
+        image: string; x: number; y: number; width: number; height: number
+      }
+    }>
+  }>({});
 
   const [load, setLoad] = useState<boolean>(false);
 
@@ -42,16 +44,16 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
       const pageStack = newStack[currentPage] || [];
       const lastEffect = pageStack.pop();
 
-      if (!lastEffect) return newStack; // No effect to undo
+      if (!lastEffect) return newStack; 
 
       // Restore the last saved state from the undo stack
       const context = canvasRef.current?.getContext('2d');
       if (context && canvasRef.current) {
         const img = new Image();
-        img.src = lastEffect.data.image; // Use the image data saved in the undo stack
+        img.src = lastEffect.data.image; 
         img.onload = () => {
           if (canvasRef.current) {
-            context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); // Clear canvas
+            context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); // Clearing canvas
             context.drawImage(img, 0, 0); // Redraw the last saved state
 
             // Reapply remaining effects and annotations
@@ -69,11 +71,10 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
     if (!canvasRef.current) return;
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
-
     if (context) {
-      // Save current state to undoStack before applying the effect
+    
       const img = new Image();
-      img.src = canvas.toDataURL(); // Save current canvas state as an image
+      img.src = canvas.toDataURL(); 
       img.onload = () => {
         setUndoStack(prevStack => ({
           ...prevStack,
@@ -83,7 +84,6 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
           ]
         }));
 
-        // Apply the effect
         if (type === 'blur') {
           blurSelection(data);
         } else if (type === 'erase') {
@@ -92,39 +92,6 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
       };
     }
   };
-
-  const addAnnotation = (rect: { x: number; y: number; width: number; height: number }, text: string, color: string) => {
-    if (!canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
-
-    if (context) {
-      // Capture the current canvas state
-      const img = new Image();
-      img.src = canvas.toDataURL(); // Capture current canvas state as image data URL
-
-      img.onload = () => {
-        // Draw the rectangle
-        context.fillStyle = color;
-        context.fillRect(rect.x, rect.y, rect.width, rect.height);
-
-        // Draw the text
-        context.fillStyle = 'black'; // Text color
-        context.font = '12px Arial'; // Font style
-        context.fillText(text, rect.x, rect.y + rect.height / 2); // Adjust text position
-
-        // Save annotation details separately for reapplication
-        setAnnotations(prevAnnotations => ({
-          ...prevAnnotations,
-          [currentPage]: [
-            ...(prevAnnotations[currentPage] || []),
-            { rect, text, color }
-          ]
-        }));
-      };
-    }
-  };
-
 
   const renderPage = async (pageNum: number) => {
     const loadingTask = pdfjsLib.getDocument(fileUrl);
@@ -162,14 +129,13 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
 
     if (context) {
       pageAnnotations.forEach(({ rect, text, color }) => {
-        // Draw the rectangle
+        
         context.fillStyle = color;
         context.fillRect(rect.x, rect.y, rect.width, rect.height);
 
-        // Draw the text
-        context.fillStyle = 'black'; // Text color
-        context.font = '12px Arial'; // Font style
-        context.fillText(text, rect.x, rect.y + rect.height / 2); // Adjust text position
+        context.fillStyle = 'black'; 
+        context.font = '12px Arial'; 
+        context.fillText(text, rect.x, rect.y + rect.height / 2); 
       });
     }
   };
@@ -195,7 +161,6 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
 
   const handleNextPage = () => {
     if (currentPage < numPages) {
-
       setCurrentPage((prevPage) => prevPage + 1);
     }
   };
@@ -255,6 +220,9 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
       applyEffect('erase', selectionRect);
     }
   };
+  const handleAnnotation = (rect: { x: number; y: number; width: number; height: number }, text: string, color: string) => {
+    addAnnotation(canvasRef, rect, text, color, currentPage, setAnnotations)
+  };
 
   const blurSelection = (data: { x: number; y: number; width: number; height: number }) => {
     if (!canvasRef.current) return;
@@ -283,57 +251,13 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
 
 
   const handleDownloadClick = async () => {
-    if (!canvasRef.current) return;
-    // Create a new PDF document
-    const pdfDoc = await PDFDocument.create();
-    setLoad(true);
-    // Iterate through all pages
-    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-      // Switch to the correct page
-      setCurrentPage(pageNum);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for the page to be rendered
-
-      // Get the canvas for the current page
-      const canvas = canvasRef.current;
-      const context = canvas.getContext('2d');
-
-      if (context) {
-        // Get canvas data URL for the current page
-        const dataURL = canvas.toDataURL('image/png');
-        const imageBytes = await fetch(dataURL).then(res => res.arrayBuffer());
-        const image = await pdfDoc.embedPng(imageBytes);
-
-        // Set page size to match the canvas size
-        const pageWidth = canvas.width;
-        const pageHeight = canvas.height;
-
-        // Create a new page in the PDF with the same dimensions as the canvas
-        const pdfPage = pdfDoc.addPage([pageWidth, pageHeight]);
-
-        // Draw the image on the PDF page
-        pdfPage.drawImage(image, {
-          x: 0,
-          y: 0,
-          width: pageWidth,
-          height: pageHeight,
-        });
-      }
-    }
-    setLoad(false);
-    // Save the PDF and trigger download
-    const pdfBytes = await pdfDoc.save();
-    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'updated_document.pdf';
-    link.click();
-
+    await downloadPDF(canvasRef, numPages, setCurrentPage, setLoad);
   };
 
 
   return (
     <div >
-      <div className="annotation-container flex flex-row flex-wrap ">
+      <div className="annotation-container flex flex-row flex-wrap mt-3">
         {(annotations[currentPage] || []).map((annotation, index) => (
           <div
             key={index}
@@ -345,76 +269,30 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
         ))}
 
       </div>
-      <div className='flex flex-row justify-between  py-1  text-xl'>
 
-        <div className='flex flex-row gap-3 mb-1 my-1 mt-2'>
-          <button
-            onClick={handleBlurClick}
-            className="px-2  cursor-pointer"
-            disabled={!selectionRect || selectionRect.width === 0 || selectionRect.height === 0}
-          >
-            <MdBlurOn />
-          </button>
-          <button
-            onClick={handleEraseClick}
-            className="px-2   cursor-pointer"
-            disabled={!selectionRect || selectionRect.width === 0 || selectionRect.height === 0}
-          >
-            <FaEraser />
-          </button>
-          <button
-            onClick={() => {
-              if (selectionRect && selectionRect.width > 0 && selectionRect.height > 0) {
-                const color = getRandomLightColor();
-                const text = prompt('Enter annotation text:') || '';
-                if (text) {
-                  addAnnotation(selectionRect, text, color);
-                }
-              }
-            }}
-            className="px-2 cursor-pointer"
-            disabled={!selectionRect || selectionRect.width === 0 || selectionRect.height === 0}
-          >
-            <IoIosAddCircleOutline />
-          </button>
-          <button
-            onClick={handleDownloadClick}
-            className="px-2   cursor-pointer"
-          >
-            <FaDownload />
-          </button>
-          {load && <span><FaSpinner className='animate-spin text-base' /></span>}
-        </div>
-        <div className='flex flex-row  px-2  text-gray-600'>
-          <button onClick={() => undoAction()}><FaUndo /></button>
+      {/*  Icons list*/}
+      <Toolbar
+        handleBlurClick={handleBlurClick}
+        handleEraseClick={handleEraseClick}
+        handleAnnotation={handleAnnotation}
+        handleDownloadClick={handleDownloadClick}
+        undoAction={undoAction}
+        getRandomLightColor={getRandomLightColor}
+        load={load}
+        selectionRect={selectionRect}
+      />
 
-        </div>
+      {/* Canvas Component */}
+      <CanvasOverlay
+        canvasRef={canvasRef}
+        overlayRef={overlayRef}
+        isSelecting={isSelecting}
+        handleMouseDown={handleMouseDown}
+        handleMouseMove={handleMouseMove}
+        handleMouseUp={handleMouseUp}
+      />
 
-      </div>
-
-      <div className="">
-
-        <div className="canvas-container relative">
-          <canvas
-            ref={canvasRef}
-            className="canvas border-2 border-black bg-[#e1e1ea]"
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-          />
-          <div
-            ref={overlayRef}
-            className={`absolute border-dotted border-2 border-blue-600 bg-blue-100 opacity-50   ${isSelecting ? 'block' : 'hidden'
-              }`}
-            style={{
-              position: 'absolute',
-              pointerEvents: 'none',
-            }}
-          />
-        </div>
-      </div>
-
-
+      {/* Page Navigation */}
       <div className="flex my-4 flex-row gap-2 items-center justify-center">
         <button
           onClick={handlePreviousPage}
@@ -433,7 +311,6 @@ const PDFEditor = ({ fileUrl }: { fileUrl: string }) => {
         >
           Next Page
         </button>
-
       </div>
     </div>
   );
